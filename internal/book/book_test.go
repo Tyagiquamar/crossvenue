@@ -132,12 +132,13 @@ func TestDigestDeterministic(t *testing.T) {
 		b.LoadSnapshot(snap(7))
 		return b
 	}
-	if mk().Digest() != mk().Digest() {
+	same1, same2 := mk().Digest(), mk().Digest()
+	if same1 != same2 {
 		t.Fatal("digest must be deterministic")
 	}
 	b := mk()
 	b.ApplyDelta(domain.BookDelta{Sequence: 8, Bids: []domain.Level{lvl("1", "1")}})
-	if b.Digest() == mk().Digest() {
+	if b.Digest() == same1 {
 		t.Fatal("digest should change with content")
 	}
 }

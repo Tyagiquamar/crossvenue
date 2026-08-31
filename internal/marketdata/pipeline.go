@@ -62,7 +62,6 @@ type bookLane struct {
 	bk      *book.Book
 	tracker book.Tracker
 	ch      chan domain.MarketEvent
-	closed  atomic.Bool
 }
 
 // Pipeline routes events to per-book lanes and owns all book mutation.
