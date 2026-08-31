@@ -101,6 +101,10 @@ func TestScene1SequenceGapInvalidatesAndResyncs(t *testing.T) {
 	if ready, _ := bookState(); ready {
 		t.Fatal("gap must invalidate the book")
 	}
+	// While invalidated, no opportunities may reference the gapped book.
+	if opps := eng.Opp.Evaluate("BTC-USDT", []domain.Venue{b, okx}); len(opps) != 0 {
+		t.Fatalf("gapped book must not produce opportunities: %+v", opps)
+	}
 	// Resync: fresh snapshot.
 	ingestSync(t, eng, snapEvent(b, 500, "99990", "100000", ts))
 	if ready, _ := bookState(); !ready {
@@ -113,6 +117,60 @@ func TestScene1SequenceGapInvalidatesAndResyncs(t *testing.T) {
 	}
 	if !types["BookInvalidated"] || !types["BookResynced"] {
 		t.Fatalf("journal missing transitions: %v", types)
+	}
+}
+
+// TestScene2DisconnectedVenueExcluded: a venue that stops publishing (its
+// WebSocket dropped) ages out and is excluded from evaluation, while the
+// remaining venues continue to produce opportunities.
+func TestScene2DisconnectedVenueExcludedOthersContinue(t *testing.T) {
+	cfg := testCfg()
+	cfg.Risk.MaxQuoteAgeMs = 100
+	j := journal.New()
+	clk := clock.NewManualClock(time.Unix(1_000_000, 0))
+	eng, err := engine.New(cfg, j, clk, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go eng.Pipe.Run(ctx)
+	t.Cleanup(eng.Pipe.Stop)
+
+	b, o, y := domain.VenueBinance, domain.VenueOKX, domain.VenueBybit
+	all := []domain.Venue{b, o, y}
+	ts := clk.Now()
+	ingestSync(t, eng,
+		snapEvent(b, 1, "99990", "100000", ts),
+		snapEvent(o, 1, "100030", "100100", ts),
+		snapEvent(y, 1, "99995", "100010", ts),
+	)
+	// Precondition: with all venues live, binance pairs participate.
+	hasBinance := false
+	for _, op := range eng.Opp.Evaluate("BTC-USDT", all) {
+		if op.BuyVenue == b || op.SellVenue == b {
+			hasBinance = true
+		}
+	}
+	if !hasBinance {
+		t.Fatal("precondition: binance should participate while live")
+	}
+
+	// Binance "disconnects": no further events. Others keep publishing.
+	clk.Advance(10 * time.Second)
+	fresh := clk.Now()
+	ingestSync(t, eng,
+		snapEvent(o, 2, "100030", "100100", fresh),
+		snapEvent(y, 2, "99995", "100010", fresh),
+	)
+	opps := eng.Opp.Evaluate("BTC-USDT", all)
+	if len(opps) == 0 {
+		t.Fatal("remaining venues must continue producing opportunities")
+	}
+	for _, op := range opps {
+		if op.BuyVenue == b || op.SellVenue == b {
+			t.Fatalf("disconnected venue must be excluded: %+v", op)
+		}
 	}
 }
 
@@ -209,5 +267,15 @@ func TestScene8QueueOverloadInvalidates(t *testing.T) {
 	v, ok := eng.Books.Snapshot(domain.VenueBinance, "BTC-USDT", 1)
 	if ok && v.State.Ready {
 		t.Fatal("overload must invalidate the book, not silently drop deltas")
+	}
+	// The overload must be journaled as a correctness event, not swallowed.
+	found := false
+	for _, e := range eng.Journal.Events() {
+		if e.Type == "BookInvalidated" && e.Payload["reason"] == "queue_overload" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("overload must journal BookInvalidated with reason queue_overload")
 	}
 }

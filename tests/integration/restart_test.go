@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -45,6 +46,30 @@ func TestRestartBooksStartInvalid(t *testing.T) {
 	bk2 := eng2.Books.Get(domain.VenueBinance, "BTC-USDT")
 	if bk2.State().Ready {
 		t.Fatal("books must start invalid after restart; never resume from stored book state")
+	}
+
+	// Books stay invalid until fresh market data: a bare delta (matching
+	// the pre-restart sequence!) must not resurrect the book; only a fresh
+	// snapshot resynchronizes it. Read state through Snapshot views — they
+	// are the thread-safe read path while lane goroutines run.
+	ready := func() bool {
+		v, ok := eng2.Books.Snapshot(domain.VenueBinance, "BTC-USDT", 1)
+		return ok && v.State.Ready
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go eng2.Pipe.Run(ctx)
+	t.Cleanup(func() {
+		cancel()
+		eng2.Pipe.Stop()
+	})
+	ts := time.Now()
+	ingestSync(t, eng2, deltaEvent(domain.VenueBinance, 43, 42, "100011", ts))
+	if ready() {
+		t.Fatal("delta without fresh snapshot must not resurrect a book after restart")
+	}
+	ingestSync(t, eng2, snapEvent(domain.VenueBinance, 100, "99990", "100010", ts))
+	if !ready() {
+		t.Fatal("fresh snapshot must resynchronize the book after restart")
 	}
 
 	// Restore portfolio balances (recovery), ensure ledger is independent.
