@@ -35,16 +35,23 @@ This document defines ordering and sequence expectations. Tests in
 ## OKX Spot
 
 - Channel `books`: `action:"snapshot"` then `action:"update"`.
-- `seqId` must advance by exactly 1 per instrument. `seqId <= last` is a
-  duplicate; `seqId > last+1` is a gap.
+- Within a clean session `seqId` advances by exactly 1 per instrument;
+  `seqId <= last` is a duplicate, `seqId > last+1` is checked next.
+- Reconnect/resume: OKX re-sends a snapshot and updates carry
+  `prevSeqId` chaining to the prior seqId. After a session hiccup the
+  venue may resume at a non-contiguous `seqId`; a delta whose
+  `prevSeqId` equals our last seqId is accepted as a bridge (re-anchor)
+  rather than a gap. An unrelated `prevSeqId` is a true gap.
 - Application-level heartbeat: client sends `"ping"`, expects `"pong"`.
 
 ## Bybit Spot
 
 - Topic `orderbook.50.<symbol>`: `type:"snapshot"` then `type:"delta"`.
-- `u` must advance by exactly 1. Duplicates (`u <= last`) are dropped;
-  jumps are gaps.
-- Reconnect always re-subscribes; the next snapshot re-anchors the book.
+- Within a session `u` advances by exactly 1 (prev u = u-1). Duplicates
+  (`u <= last`) are dropped.
+- Reconnect: re-subscribe re-sends a snapshot; `u` may resume
+  non-contiguously. A delta whose prev (`u-1`... tracked lastSeq) matches
+  our last seq is accepted as a bridge; an unrelated jump is a gap.
 
 ## Synthetic venue
 

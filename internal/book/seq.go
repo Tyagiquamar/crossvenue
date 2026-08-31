@@ -120,6 +120,14 @@ func (t *OKXTracker) OnSnapshot(seq int64) { t.ready, t.lastSeq = true, seq }
 func (t *OKXTracker) Ready() bool { return t.ready }
 
 // Check implements Tracker.
+//
+// OKX re-sends a snapshot on reconnect and each update carries prevSeqId
+// chaining to the prior seqId. Within a clean session seqId advances by 1,
+// but after a session-level hiccup the venue may resume at a non-contiguous
+// seqId while still carrying a valid prevSeqId that matches our last known
+// seq. Treat a delta whose PrevSequence equals our lastSeq as a valid bridge
+// (re-anchor) rather than a gap — the alternative is permanent churn because
+// a strict +1 check can never recover once the venue resumes out of step.
 func (t *OKXTracker) Check(d domain.BookDelta) Verdict {
 	if !t.ready {
 		return NeedSnapshot
@@ -128,6 +136,10 @@ func (t *OKXTracker) Check(d domain.BookDelta) Verdict {
 	case d.Sequence <= t.lastSeq:
 		return Duplicate
 	case d.Sequence == t.lastSeq+1:
+		t.lastSeq = d.Sequence
+		return Apply
+	case d.PrevSequence == t.lastSeq:
+		// Bridge: venue resumed non-contiguously but chains to our state.
 		t.lastSeq = d.Sequence
 		return Apply
 	default:
@@ -153,6 +165,11 @@ func (t *BybitTracker) OnSnapshot(seq int64) { t.ready, t.lastSeq = true, seq }
 func (t *BybitTracker) Ready() bool { return t.ready }
 
 // Check implements Tracker.
+//
+// Bybit re-sends a snapshot on reconnect; deltas chain on u (prev u = u-1
+// within a session). After a reconnect the venue may resume at a
+// non-contiguous u. A strict +1 rule can never recover from that, so accept
+// a delta whose PrevSequence equals our lastSeq as a valid bridge.
 func (t *BybitTracker) Check(d domain.BookDelta) Verdict {
 	if !t.ready {
 		return NeedSnapshot
@@ -161,6 +178,9 @@ func (t *BybitTracker) Check(d domain.BookDelta) Verdict {
 	case d.Sequence <= t.lastSeq:
 		return Duplicate
 	case d.Sequence == t.lastSeq+1:
+		t.lastSeq = d.Sequence
+		return Apply
+	case d.PrevSequence == t.lastSeq:
 		t.lastSeq = d.Sequence
 		return Apply
 	default:

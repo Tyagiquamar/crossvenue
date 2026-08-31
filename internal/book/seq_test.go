@@ -51,8 +51,26 @@ func TestOKXSequenceRules(t *testing.T) {
 	if tr.Check(delta(51, 0)) != Apply {
 		t.Fatal("next applies")
 	}
-	if tr.Check(delta(53, 0)) != Gap {
-		t.Fatal("skip is gap")
+	if tr.Check(delta(53, 52)) != Gap {
+		t.Fatal("skip with unrelated prev is a gap")
+	}
+}
+
+// After a reconnect, OKX resumes at a non-contiguous seqId but chains
+// prevSeqId to our last known seq — that must bridge, not gap.
+func TestOKXBridgeAfterReconnect(t *testing.T) {
+	tr := NewOKXTracker()
+	tr.OnSnapshot(50)
+	tr.Check(delta(51, 0))
+	// Reconnect re-snapshot jumps forward; tracker re-anchors via OnSnapshot.
+	tr.OnSnapshot(900)
+	// First update chains prevSeqId to the new snapshot.
+	if tr.Check(delta(901, 900)) != Apply {
+		t.Fatal("update chaining to re-snapshot must apply")
+	}
+	// A non-contiguous resume that still chains to lastSeq bridges.
+	if tr.Check(delta(950, 901)) != Apply {
+		t.Fatal("non-contiguous resume with valid prevSeqId must bridge")
 	}
 }
 
@@ -60,10 +78,27 @@ func TestBybitSequenceRules(t *testing.T) {
 	tr := NewBybitTracker()
 	tr.OnSnapshot(7)
 	if tr.Check(delta(9, 0)) != Gap {
-		t.Fatal("jump is gap")
+		t.Fatal("jump with unrelated prev is gap")
 	}
-	if tr.Check(delta(8, 0)) != Apply {
+	if tr.Check(delta(8, 7)) != Apply {
 		t.Fatal("+1 applies")
+	}
+}
+
+// Bybit reconnect resume: u jumps but prev chains to last known u.
+func TestBybitBridgeAfterReconnect(t *testing.T) {
+	tr := NewBybitTracker()
+	tr.OnSnapshot(7)
+	tr.Check(delta(8, 7))
+	tr.OnSnapshot(500) // reconnect re-snapshot
+	if tr.Check(delta(501, 500)) != Apply {
+		t.Fatal("post-reconnect delta must apply")
+	}
+	if tr.Check(delta(600, 501)) != Apply {
+		t.Fatal("non-contiguous resume with valid prev must bridge")
+	}
+	if tr.Check(delta(700, 650)) != Gap {
+		t.Fatal("unrelated prev still gaps")
 	}
 }
 

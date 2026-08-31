@@ -137,6 +137,9 @@ func (a *Adapter) handle(_ context.Context, raw []byte) ([]domain.MarketEvent, e
 			ExchangeTime: exch, ReceiveTime: recv,
 		}}}, nil
 	case "delta":
+		// Bybit deltas chain on u (prev u = u-1 within a session). Set
+		// PrevSequence to u-1; the tracker's bridge rule handles resumption
+		// after a reconnect, where u may jump non-contiguously.
 		return []domain.MarketEvent{{Type: domain.EventDelta, Delta: &domain.BookDelta{
 			Venue: domain.VenueBybit, Symbol: symbol,
 			Bids: bids, Asks: asks,
