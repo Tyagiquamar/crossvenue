@@ -28,8 +28,8 @@ func baseCfg() Config {
 	}
 }
 
-func setupBooks(t *testing.T, now time.Time) *book.Manager {
-	t.Helper()
+func setupBooks(tb testing.TB, now time.Time) *book.Manager {
+	tb.Helper()
 	m := book.NewManager()
 	// Binance cheap ask; OKX rich bid: 30 USDT gross at size 1.
 	bin := m.Get(domain.VenueBinance, "BTC-USDT")
@@ -78,6 +78,31 @@ func TestOpportunityAfterCosts(t *testing.T) {
 	}
 	if !o.ExpectedNetPnL.IsNegative() {
 		t.Fatalf("net %s should be negative after fees", o.ExpectedNetPnL)
+	}
+}
+
+// BenchmarkEvaluate prices all venue pairs for one symbol (3 venues = 6
+// directed pairs) including depth walk, fees, slippage, and latency penalty.
+func BenchmarkEvaluate(b *testing.B) {
+	now := time.Unix(1_000_000, 0)
+	m := setupBooks(b, now)
+	m.Get(domain.VenueBybit, "BTC-USDT").LoadSnapshot(domain.BookSnapshot{
+		Venue: domain.VenueBybit, Symbol: "BTC-USDT", Sequence: 1,
+		Bids:        []domain.Level{{Price: fx("100020"), Qty: fx("2")}},
+		Asks:        []domain.Level{{Price: fx("100090"), Qty: fx("2")}},
+		ReceiveTime: now,
+	})
+	fees := FeeSchedule{
+		domain.VenueBinance: {TakerBps: 10},
+		domain.VenueOKX:     {TakerBps: 10},
+		domain.VenueBybit:   {TakerBps: 10},
+	}
+	e := New(m, fees, LatencyModel{}, baseCfg(), clock.NewManualClock(now))
+	venues := []domain.Venue{domain.VenueBinance, domain.VenueOKX, domain.VenueBybit}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = e.Evaluate("BTC-USDT", venues)
 	}
 }
 
