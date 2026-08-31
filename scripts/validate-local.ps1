@@ -95,8 +95,10 @@ if ($apiReady) {
   $booksReady = @($books | Where-Object { $_.ready -and -not $_.stale }).Count
   $venuesReady = @($venues | Where-Object { $_.connected }).Count
 }
-Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 if (-not $apiReady) { $script:failed = $true }
+# Stop the engine: taskkill kills the whole process tree (a blocked WS or
+# lane goroutine can keep the wrapper PID alive under Stop-Process).
+& taskkill /PID $proc.Id /T /F 2>&1 | Out-Null
 if (-not $Compact) {
   Write-Host ("== synthetic proof: api_ready={0} venues_connected={1} books_ready={2}" -f $apiReady, $venuesReady, $booksReady)
 }
