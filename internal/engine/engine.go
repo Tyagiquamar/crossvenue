@@ -22,6 +22,7 @@ import (
 	"crossvenue/internal/portfolio"
 	"crossvenue/internal/replay"
 	"crossvenue/internal/risk"
+	"crossvenue/internal/venue"
 	"crossvenue/pkg/decimal"
 )
 
@@ -56,6 +57,10 @@ type Supervisor struct {
 	maxRecent     int
 
 	venues []domain.Venue
+
+	// adapters, keyed by venue, enable resync requests to reach the live
+	// feed. Nil in replay mode.
+	adapters map[domain.Venue]venue.MarketDataAdapter
 
 	// RecordSink receives every normalized event pre-pipeline (recorder).
 	cancel context.CancelFunc
@@ -123,6 +128,12 @@ func New(cfg *config.Config, j *journal.Journal, clk clock.Clock, log *slog.Logg
 		Clock:      clk,
 		ResyncRequest: func(v domain.Venue, sym, reason string) {
 			log.Warn("resync requested", "venue", v, "symbol", sym, "reason", reason)
+			s.mu.Lock()
+			a := s.adapters[v]
+			s.mu.Unlock()
+			if a != nil {
+				a.RequestResync(sym)
+			}
 		},
 	})
 	for _, v := range s.venues {
@@ -217,6 +228,16 @@ func (f fillJournal) OnFill(fe execution.FillEvent) {
 
 // AttachRecorder tees every inbound event to the recorder.
 func (s *Supervisor) AttachRecorder(r *replay.Recorder) { s.recorder = r }
+
+// AttachAdapters registers live adapters so resync requests reach them.
+func (s *Supervisor) AttachAdapters(adapters []venue.MarketDataAdapter) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.adapters = make(map[domain.Venue]venue.MarketDataAdapter, len(adapters))
+	for _, a := range adapters {
+		s.adapters[a.Venue()] = a
+	}
+}
 
 // Ingest is the single entry point for normalized events (all modes).
 func (s *Supervisor) Ingest(ev domain.MarketEvent) {

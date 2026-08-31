@@ -5,6 +5,7 @@ package wsbase
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -15,6 +16,10 @@ import (
 
 	"crossvenue/internal/domain"
 )
+
+// errResyncRequested is returned internally to drop the session when a
+// resync has been requested; Run treats it as a normal reconnect.
+var errResyncRequested = errors.New("wsbase: resync requested")
 
 // Handler parses one raw WS message into zero or more normalized events.
 // Returning ErrNeedsResync signals the adapter to re-snapshot.
@@ -49,6 +54,9 @@ type Conn struct {
 
 	reconnects atomic.Uint64
 	closed     atomic.Bool
+	// forceReconnect, when signalled, asks the active session to drop so
+	// Run reconnects and re-subscribes (which re-snapshots the book).
+	forceReconnect chan struct{}
 }
 
 // New constructs the connection manager.
@@ -65,7 +73,16 @@ func New(cfg Config, h Handler) *Conn {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	return &Conn{cfg: cfg, handler: h}
+	return &Conn{cfg: cfg, handler: h, forceReconnect: make(chan struct{}, 1)}
+}
+
+// RequestResync forces the current session to drop so Run reconnects and
+// re-subscribes, producing a fresh snapshot. Safe to call concurrently.
+func (c *Conn) RequestResync() {
+	select {
+	case c.forceReconnect <- struct{}{}:
+	default:
+	}
 }
 
 // Health returns a snapshot of venue health.
@@ -175,6 +192,13 @@ func (c *Conn) session(ctx context.Context, symbols []string, out chan<- domain.
 		_, msg, err := conn.Read(ctx)
 		if err != nil {
 			return err
+		}
+		// A pending resync request drops the session after the current read
+		// so the book re-anchors on the reconnect snapshot.
+		select {
+		case <-c.forceReconnect:
+			return errResyncRequested
+		default:
 		}
 		events, herr := c.handler(ctx, msg)
 		if herr != nil {

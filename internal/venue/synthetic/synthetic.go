@@ -79,6 +79,10 @@ func (g *Generator) Venue() domain.Venue { return g.opts.Venue }
 // Connect implements venue.MarketDataAdapter.
 func (g *Generator) Connect(context.Context) error { return nil }
 
+// RequestResync implements venue.MarketDataAdapter: the generator re-emits
+// a snapshot on its next cycle; no external action is needed.
+func (g *Generator) RequestResync(string) {}
+
 // Close implements venue.MarketDataAdapter.
 func (g *Generator) Close() error {
 	g.healthy.Store(false)

@@ -52,13 +52,43 @@ func deltaEvent(v domain.Venue, seq, prev int64, ask string, ts time.Time) domai
 	}}
 }
 
-// ingestSync submits events and waits briefly for the async lane to apply.
+// ingestSync submits events and waits until each has been applied by the
+// async lane, observed via the book's monotonically increasing published
+// version — no wall-clock sleeps.
 func ingestSync(t *testing.T, eng *engine.Supervisor, evs ...domain.MarketEvent) {
 	t.Helper()
+	type key struct {
+		v   domain.Venue
+		sym string
+	}
+	before := map[key]uint64{}
+	count := map[key]int{}
 	for _, ev := range evs {
+		k := key{ev.VenueOf(), ev.SymbolOf()}
+		if _, seen := before[k]; !seen {
+			if v, ok := eng.Books.Snapshot(k.v, k.sym, 1); ok {
+				before[k] = v.State.Version
+			}
+		}
+		count[k]++
 		eng.Ingest(ev)
 	}
-	time.Sleep(20 * time.Millisecond)
+	// Wait until every affected book's version advanced by at least the
+	// number of events we sent it (each apply increments Version once).
+	deadline := time.Now().Add(5 * time.Second)
+	for k, n := range count {
+		for {
+			view, ok := eng.Books.Snapshot(k.v, k.sym, 1)
+			if ok && view.State.Version >= before[k]+uint64(n) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("events for %s/%s not applied in time (version %d, want >= %d)",
+					k.v, k.sym, view.State.Version, before[k]+uint64(n))
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
 }
 
 func startEngine(t *testing.T, cfg *config.Config) *engine.Supervisor {

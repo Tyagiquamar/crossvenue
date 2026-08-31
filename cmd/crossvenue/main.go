@@ -189,6 +189,10 @@ func main() {
 		src = &engine.ReplaySource{Path: cfg.Replay.File, Speed: cfg.Replay.Speed}
 	}
 
+	// Wire resync requests to the live/synthetic adapters so a detected gap
+	// or overload forces a re-snapshot instead of permanent invalidation.
+	eng.AttachAdapters(adapters)
+
 	// API server.
 	if *serveAPI {
 		srv := &http.Server{

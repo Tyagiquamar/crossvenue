@@ -14,6 +14,10 @@ type MarketDataAdapter interface {
 	Venue() domain.Venue
 	Connect(ctx context.Context) error
 	SubscribeBook(ctx context.Context, symbols []string, out chan<- domain.MarketEvent) error
+	// RequestResync asks the adapter to re-snapshot a book (e.g. after the
+	// pipeline detects a sequence gap). Implementations drop and re-
+	// establish the subscription so a fresh snapshot arrives.
+	RequestResync(symbol string)
 	Health() domain.VenueHealth
 	Close() error
 }

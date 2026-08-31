@@ -54,6 +54,10 @@ func (a *Adapter) Venue() domain.Venue { return domain.VenueBybit }
 // Connect implements venue.MarketDataAdapter.
 func (a *Adapter) Connect(context.Context) error { return nil }
 
+// RequestResync implements venue.MarketDataAdapter: drop the session so the
+// reconnect re-subscribes and a fresh snapshot re-anchors the book.
+func (a *Adapter) RequestResync(string) { a.conn.RequestResync() }
+
 // Health implements venue.MarketDataAdapter.
 func (a *Adapter) Health() domain.VenueHealth { return a.conn.Health() }
 
