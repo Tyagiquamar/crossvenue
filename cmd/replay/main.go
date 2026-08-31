@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 
 	"crossvenue/internal/config"
 	"crossvenue/internal/engine"
@@ -45,8 +46,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	for k, d := range eng.BookDigests() {
-		fmt.Printf("book %s digest %016x\n", k, d)
+	// Sorted output: replay stdout must be byte-identical across runs so
+	// its SHA256 is a stable parity proof (map iteration order is random).
+	digests := eng.BookDigests()
+	keys := make([]string, 0, len(digests))
+	for k := range digests {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("book %s digest %016x\n", k, digests[k])
 	}
 	fmt.Printf("journal digest %016x\n", j.Digest())
 	fmt.Printf("realized_pnl %s\n", eng.Ledger.Realized().String())
