@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: crossvenue
+          POSTGRES_PASSWORD: crossvenue
+          POSTGRES_DB: crossvenue
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crossvenue"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: fmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test ./...
+      - name: race
+        run: go test -race ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1 ./...
+      - name: build
+        run: |
+          go build ./cmd/crossvenue
+          go build ./cmd/replay
+          go build ./cmd/loadgen
+      - name: replay parity
+        run: |
+          go run ./cmd/loadgen --venues 3 --symbols 1 --events-per-second 200 --duration 2s --seed 42 --out /tmp/ci.recording
+          A=$(go run ./cmd/replay --recording /tmp/ci.recording --speed max | sha256sum)
+          B=$(go run ./cmd/replay --recording /tmp/ci.recording --speed max | sha256sum)
+          test "$A" = "$B"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false

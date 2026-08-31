@@ -1,0 +1,67 @@
+mode: synthetic
+
+symbols:
+  - BTC-USDT
+
+venues:
+  binance:
+    enabled: true
+    taker_bps: 10
+    maker_bps: 10
+    outbound_us: 5000
+    initial_base: "2"
+    initial_quote: "100000"
+  okx:
+    enabled: true
+    taker_bps: 10
+    maker_bps: 8
+    outbound_us: 7000
+    initial_base: "3"
+    initial_quote: "200000"
+  bybit:
+    enabled: true
+    taker_bps: 10
+    maker_bps: 10
+    outbound_us: 6000
+    initial_base: "1"
+    initial_quote: "150000"
+
+risk:
+  max_trade_notional_usd: "10000"
+  max_symbol_exposure_usd: "25000"
+  max_venue_exposure_usd: "50000"
+  max_total_exposure_usd: "100000"
+  max_quote_age_ms: 750
+  min_edge_bps: 3
+  min_profit_usd: "1"
+  max_outstanding_orders: 64
+  max_consecutive_failures: 10
+  daily_loss_limit_usd: "1000"
+  kill_switch: false
+
+execution:
+  mode: simulation
+  latency_mode: fixed
+  policy: parallel
+  trade_quantity: "0.01"
+  slippage_bps: 1
+  seed: 42
+
+storage:
+  postgres_url: ""
+
+recording:
+  enabled: false
+  path: ""
+
+replay:
+  file: ""
+  speed: max
+
+synthetic:
+  seed: 42
+  events_per_second: 200
+  gap_every: 0
+
+api:
+  listen: 127.0.0.1:8471
