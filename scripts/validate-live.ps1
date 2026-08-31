@@ -69,19 +69,21 @@ $opps = @(Get-Content (Join-Path $art 'opportunities.json') -Raw | ConvertFrom-J
 Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 
 Write-Host ''
-Write-Host ('{0,-9} {1,-10} {2,-11} {3,-6} {4,-14} {5,-14} {6,-8} {7}' -f 'VENUE','CONNECTED','BOOK READY','SEQ','BEST BID','BEST ASK','AGE MS','GAPS')
+Write-Host ('{0,-9} {1,-11} {2,-11} {3,-14} {4,-14} {5,-14} {6,-8} {7}' -f 'VENUE','CONNECTED','BOOK READY','SEQ','BEST BID','BEST ASK','AGE MS','GAPS')
 $synced = 0; $connected = 0
 foreach ($v in ($venues | Sort-Object venue)) {
   $b = $books | Where-Object { $_.venue -eq $v.venue } | Select-Object -First 1
   $bookReady = $b -and $b.ready -and -not $b.stale
   if ($v.connected) { $connected++ }
   if ($v.connected -and $bookReady -and $v.sequence_gaps -eq 0) { $synced++ }
-  $bid = if ($b -and $b.bids) { $b.bids[0].price } else { '-' }
-  $ask = if ($b -and $b.asks) { $b.asks[0].price } else { '-' }
-  $seq = if ($b) { $b.sequence } else { '-' }
-  $age = if ($b) { $b.age_ms } else { '-' }
-  $state = if ($v.connected) { 'yes' } else { 'NO (unreachable from this network)' }
-  Write-Host ('{0,-9} {1,-10} {2,-11} {3,-6} {4,-14} {5,-14} {6,-8} {7}' -f $v.venue, $state, $(if ($bookReady) { 'yes' } else { 'no' }), $seq, $bid, $ask, $age, $v.sequence_gaps)
+  # Coerce possibly-array JSON scalars to single values for clean display.
+  $bid = if ($b -and $b.bids) { [string]($b.bids | Select-Object -First 1).price } else { '-' }
+  $ask = if ($b -and $b.asks) { [string]($b.asks | Select-Object -First 1).price } else { '-' }
+  $seq = if ($b) { [string]$b.sequence } else { '-' }
+  $age = if ($b) { [string]$b.age_ms } else { '-' }
+  $gaps = [string]$v.sequence_gaps
+  $state = if ($v.connected) { 'yes' } else { 'NO (unreachable)' }
+  Write-Host ('{0,-9} {1,-11} {2,-11} {3,-14} {4,-14} {5,-14} {6,-8} {7}' -f $v.venue, $state, $(if ($bookReady) { 'yes' } else { 'no' }), $seq, $bid, $ask, $age, $gaps)
 }
 Write-Host ''
 Write-Host "opportunities detected: $($opps.Count) (zero is fine — spreads after fees are rare)"

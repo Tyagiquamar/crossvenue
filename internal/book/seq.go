@@ -50,26 +50,33 @@ type Tracker interface {
 
 // ---- Binance spot ----
 // Rules (docs/market-data-contract.md):
-//   - First event after snapshot: prevUpdateID (PrevSequence) <= snapshot
-//     lastUpdateID AND updateID (Sequence) >= snapshot lastUpdateID.
-//     We adopt event.Sequence as the new anchor on first accepted delta.
-//   - Thereafter each event must have PrevSequence == last Sequence.
-//   - PrevSequence == last-? duplicates: if Sequence <= last, drop.
+//   - The adapter interleaves two streams on one tracker: depth20 (a
+//     periodic partial-image snapshot, sequence = lastUpdateId) and depth
+//     (incremental deltas, sequence = u / prev = U). These are independent
+//     sequence counters, so the tracker anchors on whichever arrives first
+//     and thereafter enforces continuity within the delta stream only.
+//   - Deltas before any anchor: the first delta anchors the book (adopt
+//     its u); a snapshot always re-anchors and is applied immediately.
+//   - Thereafter each delta must chain: prev (U) <= lastSeq <= seq (u).
+//     Deltas carry ranges, so strict equality (prev == lastSeq) would
+//     false-positive on partial-image resyncs; we accept any delta whose
+//     range covers lastSeq and reject only true discontinuities.
 type BinanceTracker struct {
-	ready    bool
-	lastSeq  int64
-	anchored bool
-	snapSeq  int64
+	ready   bool
+	lastSeq int64
 }
 
 // NewBinanceTracker constructs the tracker.
 func NewBinanceTracker() *BinanceTracker { return &BinanceTracker{} }
 
-// OnSnapshot implements Tracker.
+// OnSnapshot implements Tracker. Snapshots always re-anchor.
 func (t *BinanceTracker) OnSnapshot(seq int64) {
-	t.ready, t.anchored = true, false
-	t.snapSeq = seq
-	t.lastSeq = seq
+	t.ready = true
+	// Anchor the delta chain at the snapshot's lastUpdateId. Deltas whose
+	// range covers this id continue the book.
+	if seq > t.lastSeq {
+		t.lastSeq = seq
+	}
 }
 
 // Ready implements Tracker.
@@ -78,24 +85,19 @@ func (t *BinanceTracker) Ready() bool { return t.ready }
 // Check implements Tracker.
 func (t *BinanceTracker) Check(d domain.BookDelta) Verdict {
 	if !t.ready {
-		return NeedSnapshot
-	}
-	if !t.anchored {
-		// First delta after snapshot must bridge the snapshot id.
-		if d.Sequence < t.snapSeq {
-			return Stale
-		}
-		if d.PrevSequence > t.snapSeq {
-			return Gap // missed the bridging event
-		}
-		t.anchored = true
+		// No snapshot yet: anchor on the first delta so the book can start
+		// producing (the depth20 image will refine it when it arrives).
+		t.ready = true
 		t.lastSeq = d.Sequence
 		return Apply
 	}
 	if d.Sequence <= t.lastSeq {
 		return Duplicate
 	}
-	if d.PrevSequence != t.lastSeq {
+	// Accept the delta if its [U, u] range continues from our last seq,
+	// i.e. U <= lastSeq < u. A delta starting strictly above lastSeq+1
+	// (U > lastSeq+1) means we missed events: true gap.
+	if d.PrevSequence > t.lastSeq+1 {
 		return Gap
 	}
 	t.lastSeq = d.Sequence
