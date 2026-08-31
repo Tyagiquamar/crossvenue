@@ -113,9 +113,11 @@ make live-proof        # optional: live public-feed validation (paper-only)
 
 ## Verified locally
 
-Verified on commit `54a15ba` (Go 1.26.5, windows/amd64, 2026-08-31) by
-`make verify` → [artifacts/validation/validation.json](artifacts/validation/validation.json)
-(git-ignored; regenerated per run):
+Verified on commit `e9be5ea` (Go 1.26.5, windows/amd64, 2026-08-31) by
+`make verify` → machine-readable report written to
+`artifacts/validation/validation.json` (git-ignored; regenerated per run;
+see [docs/example-validation.json](docs/example-validation.json) for a
+committed sample from this run):
 
 | Check | Result |
 |---|---|
@@ -129,6 +131,7 @@ Verified on commit `54a15ba` (Go 1.26.5, windows/amd64, 2026-08-31) by
 | Deterministic replay parity (seed 42) | PASS |
 | Synthetic venues ready | 3/3 |
 | Failure scenes | 8/8 PASS |
+| Docker build | PASS |
 
 Benchmarks measured on the same machine (i3-1315U, illustrative only —
 not exchange/network latency): ApplyDelta 41.4 ns/op (0 allocs), VWAP
@@ -142,13 +145,14 @@ for Binance, OKX, and Bybit and validates that books synchronize without
 sequence corruption. Execution stays paper-only; no API keys are read.
 Zero profitable opportunities is a normal, passing outcome.
 
-Validated against public market data from this network (2026-08-31):
+Validated against public market data from this network on 2026-08-31
+(commit `711bd81`), real quotes captured at validation time:
 
-| Venue | Connected | Book ready | Sequence healthy |
-|---|---:|---:|---:|
-| Binance | yes | yes | yes |
-| OKX | yes | yes | yes |
-| Bybit | yes | yes | yes |
+| Venue | Connected | Book ready | Sequence gaps | Best bid (BTC-USDT) | Best ask |
+|---|---:|---:|---:|---:|---:|
+| Binance | yes | yes | 0 | 78038.00 | 78038.01 |
+| Bybit | yes | yes | 0 | 78038.40 | 78038.50 |
+| OKX | yes | yes | 0 | 78037.30 | 78037.40 |
 
 Symbols: BTC-USDT. Execution: paper/simulation only. If a venue is
 unreachable from your network, `live-proof` reports it distinctly and

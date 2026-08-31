@@ -1,8 +1,8 @@
 {
-  "commit": "d6948c4c3f0f265353665865e7e1c11b56708e73",
+  "commit": "e9be5ea63ad060983de312402de18636cf015d2d",
   "go_version": "go1.26.5 windows/amd64",
   "os_arch": "windows/amd64",
-  "timestamp_utc": "2026-08-31T12:36:50Z",
+  "timestamp_utc": "2026-08-31T13:16:30Z",
   "tests": {
     "unit": "pass",
     "race": "pass",
@@ -22,6 +22,6 @@
     "api_ready": true
   },
   "docker": {
-    "build": "skip"
+    "build": "pass"
   }
 }
