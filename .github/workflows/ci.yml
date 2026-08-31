@@ -25,7 +25,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
+          check-latest: true
           cache: true
       - name: gofmt
         run: test -z "$(gofmt -l .)"
@@ -51,7 +52,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
+          check-latest: true
           cache: true
       - name: deterministic replay parity (seed 42)
         run: |
@@ -60,5 +62,13 @@ jobs:
           B=$(go run ./cmd/replay --recording /tmp/ci.recording --speed max | sha256sum)
           echo "run 1: $A"
           echo "run 2: $B"
+          test "$A" = "$B"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with:
           context: .
           push: false
