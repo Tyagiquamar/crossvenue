@@ -1,0 +1,27 @@
+{
+  "commit": "d6948c4c3f0f265353665865e7e1c11b56708e73",
+  "go_version": "go1.26.5 windows/amd64",
+  "os_arch": "windows/amd64",
+  "timestamp_utc": "2026-08-31T12:36:50Z",
+  "tests": {
+    "unit": "pass",
+    "race": "pass",
+    "vet": "pass",
+    "staticcheck": "pass",
+    "failure_scenes": "pass"
+  },
+  "replay": {
+    "seed": 42,
+    "digest_run_1": "de7495fd8b25d9dbb66726d1bb5aac61045b23d5eef79b19ec0abddcfe87f33c",
+    "digest_run_2": "de7495fd8b25d9dbb66726d1bb5aac61045b23d5eef79b19ec0abddcfe87f33c",
+    "identical": true
+  },
+  "synthetic": {
+    "venues_connected": 3,
+    "books_ready": 3,
+    "api_ready": true
+  },
+  "docker": {
+    "build": "skip"
+  }
+}

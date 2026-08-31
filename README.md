@@ -87,7 +87,7 @@ See [docs/architecture.md](docs/architecture.md).
 | `synthetic` | Deterministic generator | Paper |
 | `replay` | Recording file | Paper, deterministic |
 
-## Failure scenes (automated in tests/integration)
+## Failure scenes (automated in tests/integration + internal/engine)
 
 1. Sequence gap → book invalidated, no opportunities, resync.
 2. Venue disconnect → venue excluded, others continue.
@@ -103,8 +103,66 @@ See [docs/architecture.md](docs/architecture.md).
 ```powershell
 go test ./...          # unit + integration + replay parity
 go test -race ./...    # race detector
-go test -bench=. -benchmem ./internal/book/
+go test -bench=. -benchmem ./...   # benchmarks (see docs/benchmarks.md)
+make verify            # full local validation: fmt, vet, staticcheck,
+                       # tests, race, seed-42 replay parity, synthetic
+                       # engine probe, failure scenes, docker build
+make proof             # compact screenshot-friendly validation summary
+make live-proof        # optional: live public-feed validation (paper-only)
 ```
+
+## Verified locally
+
+Verified on commit `54a15ba` (Go 1.26.5, windows/amd64, 2026-08-31) by
+`make verify` → [artifacts/validation/validation.json](artifacts/validation/validation.json)
+(git-ignored; regenerated per run):
+
+| Check | Result |
+|---|---|
+| gofmt | PASS |
+| go vet ./... | PASS |
+| staticcheck ./... | PASS |
+| go test ./... | PASS |
+| go test -race ./... | PASS |
+| Replay run 1 digest | `de7495fd8b25d9dbb66726d1bb5aac61045b23d5eef79b19ec0abddcfe87f33c` |
+| Replay run 2 digest | `de7495fd8b25d9dbb66726d1bb5aac61045b23d5eef79b19ec0abddcfe87f33c` |
+| Deterministic replay parity (seed 42) | PASS |
+| Synthetic venues ready | 3/3 |
+| Failure scenes | 8/8 PASS |
+
+Benchmarks measured on the same machine (i3-1315U, illustrative only —
+not exchange/network latency): ApplyDelta 41.4 ns/op (0 allocs), VWAP
+13795 ns/op, opportunity Evaluate 1856 ns/op (0 allocs). Full table in
+[docs/benchmarks.md](docs/benchmarks.md).
+
+## Live feed validation
+
+`make live-proof` connects to the public unauthenticated WebSocket feeds
+for Binance, OKX, and Bybit and validates that books synchronize without
+sequence corruption. Execution stays paper-only; no API keys are read.
+Zero profitable opportunities is a normal, passing outcome.
+
+Validated against public market data from this network (2026-08-31):
+
+| Venue | Connected | Book ready | Sequence healthy |
+|---|---:|---:|---:|
+| Binance | yes | yes | yes |
+| OKX | yes | yes | yes |
+| Bybit | yes | yes | yes |
+
+Symbols: BTC-USDT. Execution: paper/simulation only. If a venue is
+unreachable from your network, `live-proof` reports it distinctly and
+returns a PARTIAL result instead of fabricating data.
+
+## Proof
+
+Capture screenshots into `docs/images/` and reference them here.
+
+### Deterministic local validation
+<!-- add docs/images/proof-local.png after `make proof` capture -->
+
+### Live public feeds
+<!-- add docs/images/live-feeds.png after `make live-proof` capture -->
 
 ## Limitations (read this)
 
